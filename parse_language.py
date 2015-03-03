@@ -8,6 +8,7 @@ import sys
 import getopt
 import json
 import ConfigParser
+from datetime import date
 
 COL_SHIFT = 4
 KEYS_COLUMN = 0
@@ -580,7 +581,16 @@ def main(argv):
     elif command == 'f':
         print "result dir = " + result_dir
         print 'prject dir = ' + project_path
+
+        today = date.today()
+
+        os.system("cd workspace && git branch localization-" + today.isoformat());
+        os.system("cd workspace && git checkout localization-" + today.isoformat());
         copy_back_to_project_files(result_dir, project_path)
+        os.system("cd workspace && git push origin localization-" + today.isoformat());
+        os.system("cd workspace && git reset --hard HEAD");
+        os.system("cd workspace && git checkout " + PROJECT_GIT_BRANCH);
+
     elif command == 'j':
         print "input dir = " + input_dir
         print "output filename = " + result_dir
