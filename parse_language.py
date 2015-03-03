@@ -128,10 +128,13 @@ def get_project_string_key_index_comment(a_project_temp_dir):
 
 def decode_value(string):
     string = re.sub(r"^'", "^", string)
-    return string.replace('\\\'', '\'').replace("\n", "\\n")
+    return string.replace('\\\'', '\'').replace("\n", "\n")
 
-def encode_value(string):
-    string = string.replace('\'', '\\\'')
+def more_decode_value_for_strings(string):
+    return string.replace("\n", "\\n").replace("\"", "\\\"")
+
+def encode_value_for_strings(string):
+    string = string.replace('\'', '\\\'').replace("\\n", "\n").replace("\\\"", "\"")
     return re.sub(r"^", "'", string)
 
 def jsons_to_one_file(a_input_dir, a_output_filename):
@@ -191,6 +194,14 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
                 except:
                     break
 
+                if key is '' or key is None:
+                    continue
+                if key[0] == '#':
+                    continue
+                if key in SKIP_KEYS:
+                    print "skip key = " + real_key
+                    continue
+
                 if lang not in refKeyIndex[group_location][group_name]:
                     continue
 
@@ -200,13 +211,7 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
                 if group_name is '' or group_name is None:
                     group_name = 'Localizable'
 
-                if key is '' or key is None:
-                    continue
-                if key[0] == '#':
-                    continue
-                if key in SKIP_KEYS:
-                    print "skip key = " + real_key
-                    continue
+                
 
                 value = toWPString(list_of_lists[r][c])
                 #if value is None or value == '':
@@ -256,7 +261,7 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
                         f = io.open(filename, 'wb')
                         total = len(refKeyKey[group_location][group_name][lang])
                         for x in range(0, total):
-                            content = refKeyComment[group_location][group_name][lang][x] + '\"' + refKeyKey[group_location][group_name][lang][x] + '\" = \"' + refKeyValue[group_location][group_name][lang][x] + '\";\n'
+                            content = refKeyComment[group_location][group_name][lang][x] + '\"' + refKeyKey[group_location][group_name][lang][x] + '\" = \"' + more_decode_value_for_strings(refKeyValue[group_location][group_name][lang][x]) + '\";\n'
                             f.write(content)
                         if total > 0:
                             f.write('\n')
@@ -426,10 +431,10 @@ def update_values_to_new_worksheet(a_sheet_name, a_project_temp_dir):
                     break
                 if full_language_code in refKeyValue[group_name_key]:
                     lang_value = refKeyValue[group_name_key][full_language_code]
-                    list_lang_value = decode_value(list_lang_value.encode('utf-8')).decode('utf-8')
+                    list_lang_value = more_decode_value_for_strings(decode_value(list_lang_value.encode('utf-8'))).decode('utf-8')
                     if lang_value.decode('utf-8') != list_lang_value:
                         print "update [" + full_language_code + "] for " + str(realrow + 1) + " with new value = " + lang_value
-                        wks.update_cell(realrow + 1, c + 1, encode_value(lang_value).decode('utf-8'))
+                        wks.update_cell(realrow + 1, c + 1, encode_value_for_strings(lang_value).decode('utf-8'))
         else:
             free_index += 1
             print "this is new key [" + group_name_key + "] at " + str(free_index)
@@ -442,7 +447,7 @@ def update_values_to_new_worksheet(a_sheet_name, a_project_temp_dir):
                 except:
                     break
                 if full_language_code in refKeyValue[group_name_key]:
-                    wks.update_cell(free_index, c + 1, encode_value(refKeyValue[group_name_key][full_language_code]).decode('utf-8'))
+                    wks.update_cell(free_index, c + 1, encode_value_for_strings(refKeyValue[group_name_key][full_language_code]).decode('utf-8'))
 
 
 def update_list_key_mark_no_used(a_sheet_name, a_project_temp_dir):
@@ -556,7 +561,8 @@ def main(argv):
         print "export sheet = " + export_sheet
         copy_project_files(project_temp_dir, project_path)
         exportStrings(export_sheet, result_dir, project_temp_dir, output_format)
-        jsons_to_one_file(result_dir, 'test_strings.json')
+        if output_format == 'json':
+            jsons_to_one_file(result_dir, 'test_strings.json')
     elif command == 'c':
         print "create sheet = " + export_sheet
         create_new_worksheet(export_sheet)
