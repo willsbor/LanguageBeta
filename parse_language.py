@@ -348,6 +348,38 @@ def read_all_reference_data_type2(a_project_temp_dir):
                     refKeyValue[group_name_key][lang] = value
     return refKeyValue
 
+def read_all_reference_data_type3(a_project_temp_dir):
+    all_strings_files = find_string_file(a_project_temp_dir + "/")
+    refKeyValue = {}
+    for path in all_strings_files:
+        # print 'reading ' + path
+        names = path.replace( a_project_temp_dir + "/", '').split('/')
+        group_name = names[-1].replace('.strings', '')
+        lang = names[-2].replace('.lproj', '')
+        group_location = "/".join(names[:-2])
+        # print group_name + ';' + group_location + ';' + lang
+        if lang not in refKeyValue:
+            refKeyValue[lang] = {}
+        with open(path) as f:
+            content = f.readlines()
+            for line in content:
+                if line.startswith('"'):
+                    key, value = line.split("\" = \"", 2)
+                    key = key[1:]
+                    value = value[:-3]
+                    group_name_key = group_location + ";|;" + group_name + ";|;" + key
+                    # print "[" + group_name_key + ";" + value + "]"
+                    if group_name_key not in refKeyValue[lang]:
+                        refKeyValue[lang][group_name_key] = {}
+                        refKeyValue[lang][group_name_key]["key"] = key
+                        refKeyValue[lang][group_name_key]["group location"] = group_location
+                        refKeyValue[lang][group_name_key]["group"] = group_name
+                        refKeyValue[lang][group_name_key]["value"] = []
+
+                    refKeyValue[lang][group_name_key]["value"].append(value)
+                    
+    return refKeyValue
+
 def create_new_worksheet(a_sheet_name):
     gc = gspread.login(LOGIN_ACCOUNT, LOGIN_PASSWORD)
     wk = gc.open(WORKING_SPREAD_NAME)
@@ -379,7 +411,7 @@ def get_key_index(list_of_lists):
         #print "[[[" + group_name_key + "]]] = " + str(x)
     return list_group_name_key_index
 
-def update_values_to_new_worksheet(a_sheet_name, a_project_temp_dir):
+def update_values_to_new_worksheet(a_sheet_name, a_project_temp_dir, a_force_update_value=False):
     gc = gspread.login(LOGIN_ACCOUNT, LOGIN_PASSWORD)
     wk = gc.open(WORKING_SPREAD_NAME)
     try:
@@ -392,64 +424,86 @@ def update_values_to_new_worksheet(a_sheet_name, a_project_temp_dir):
     colCount = wks.col_count
     list_of_lists = wks.get_all_values()
     list_group_name_key_index = get_key_index(list_of_lists)
-    refKeyValue = read_all_reference_data_type2(a_project_temp_dir)
+    refKeyValue = read_all_reference_data_type3(a_project_temp_dir)
     
     list_size = len(list_of_lists)
     list_done_count = 0
     free_index = list_size + 5
+    print_add_key_title = False
     print "free_index = " + str(free_index)
-    for group_name_key in iter(refKeyValue):
-        list_done_count += 1
-        # print "group_name_key = " + group_name_key + "(" + str(list_done_count) + "/" + str(list_size) + ")"
 
-        real_key = group_name_key.split(";|;")[-1]
-        # CFBundleShortVersionString
-        if real_key in SKIP_KEYS:
-            print "skip key = " + real_key
+    for c in range(COL_SHIFT, colCount):
+        try:
+            full_language_code = list_of_lists[LANGUAGE_CODE_ROW][c]
+        except:
+            break
+
+        if full_language_code not in refKeyValue:
             continue
 
-        if group_name_key in list_group_name_key_index:
-            # update
-            realrow = list_group_name_key_index[group_name_key]
-            try:
-                list_key = list_of_lists[realrow][KEYS_COLUMN]
-                list_group_location = list_of_lists[realrow][GROUP_LOCATION_COLUMN]
-                list_group_name = list_of_lists[realrow][GROUP_NAME_COLUMN]
-            except:
-                break
-            if list_group_location != refKeyValue[group_name_key]["group location"].decode('utf-8'):
-                print "update group location for " + str(realrow + 1)
-                wks.update_cell(realrow + 1, GROUP_LOCATION_COLUMN + 1, refKeyValue[group_name_key]["group location"])
-            if list_group_name != refKeyValue[group_name_key]["group"].decode('utf-8'):
-                print "update group for " + str(realrow + 1)
-                wks.update_cell(realrow + 1, GROUP_NAME_COLUMN + 1, refKeyValue[group_name_key]["group"])
-            
-            for c in range(COL_SHIFT, colCount):
+        for group_name_key in iter(refKeyValue[full_language_code]):
+            list_done_count += 1
+            # print "group_name_key = " + group_name_key + "(" + str(list_done_count) + "/" + str(list_size) + ")"
+
+            real_key = group_name_key.split(";|;")[-1]
+            # CFBundleShortVersionString
+            if real_key in SKIP_KEYS:
+                print "skip key = " + real_key
+                continue
+
+            if group_name_key in list_group_name_key_index:
+                # update
+                realrow = list_group_name_key_index[group_name_key]
                 try:
-                    full_language_code = list_of_lists[LANGUAGE_CODE_ROW][c]
+                    list_key = list_of_lists[realrow][KEYS_COLUMN]
+                    list_group_location = list_of_lists[realrow][GROUP_LOCATION_COLUMN]
+                    list_group_name = list_of_lists[realrow][GROUP_NAME_COLUMN]
                     list_lang_value = list_of_lists[realrow][c]
                 except:
                     break
-                if full_language_code in refKeyValue[group_name_key]:
-                    lang_value = refKeyValue[group_name_key][full_language_code]
-                    list_lang_value = more_decode_value_for_strings(decode_value(list_lang_value.encode('utf-8'))).decode('utf-8')
-                    if lang_value.decode('utf-8') != list_lang_value:
+                if list_group_location != refKeyValue[full_language_code][group_name_key]["group location"].decode('utf-8'):
+                    print "update group location for " + str(realrow + 1)
+                    wks.update_cell(realrow + 1, GROUP_LOCATION_COLUMN + 1, refKeyValue[full_language_code][group_name_key]["group location"])
+                if list_group_name != refKeyValue[full_language_code][group_name_key]["group"].decode('utf-8'):
+                    print "update group for " + str(realrow + 1)
+                    wks.update_cell(realrow + 1, GROUP_NAME_COLUMN + 1, refKeyValue[full_language_code][group_name_key]["group"])
+
+                lang_value = refKeyValue[full_language_code][group_name_key]["value"][0]
+                list_lang_value = more_decode_value_for_strings(decode_value(list_lang_value.encode('utf-8'))).decode('utf-8')
+                if lang_value.decode('utf-8') != list_lang_value:
+                    if a_force_update_value or list_lang_value == '' or list_lang_value is None:
                         print "update [" + full_language_code + "] for " + str(realrow + 1) + " with new value = " + lang_value
                         wks.update_cell(realrow + 1, c + 1, encode_value_for_strings(lang_value).decode('utf-8'))
-        else:
-            free_index += 1
-            print "this is new key [" + group_name_key + "] at " + str(free_index)
-            wks.update_cell(free_index, KEYS_COLUMN + 1, real_key)
-            wks.update_cell(free_index, GROUP_LOCATION_COLUMN + 1, refKeyValue[group_name_key]["group location"])
-            wks.update_cell(free_index, GROUP_NAME_COLUMN + 1, refKeyValue[group_name_key]["group"])
-            for c in range(COL_SHIFT, colCount):
-                try:
-                    full_language_code = list_of_lists[LANGUAGE_CODE_ROW][c]
-                except:
-                    break
-                if full_language_code in refKeyValue[group_name_key]:
-                    wks.update_cell(free_index, c + 1, encode_value_for_strings(refKeyValue[group_name_key][full_language_code]).decode('utf-8'))
 
+                values_len = len(refKeyValue[full_language_code][group_name_key]["value"])
+                if values_len > 1:
+                    for x in range(1,values_len):
+                        value = encode_value_for_strings(refKeyValue[full_language_code][group_name_key]["value"][x]).decode('utf-8')
+                        local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, "### duplicate " + str(x) + " ###" + real_key, refKeyValue, value)
+
+            else:
+                value = encode_value_for_strings(refKeyValue[full_language_code][group_name_key]["value"][0]).decode('utf-8')
+                local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, real_key, refKeyValue, value)
+                
+                values_len = len(refKeyValue[full_language_code][group_name_key]["value"])
+                if values_len > 1:
+                    for x in range(1,values_len):
+                        value = encode_value_for_strings(refKeyValue[full_language_code][group_name_key]["value"][x]).decode('utf-8')
+                        local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, "### duplicate " + str(x) + " ###" + real_key, refKeyValue, value)
+
+def local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, real_key, refKeyValue, value):
+    if not print_add_key_title:
+        print_add_key_title = True
+        today = date.today()
+        wks.update_cell(free_index, KEYS_COLUMN + 1, "#### add new key on " + today.isoformat() + " ####")
+    free_index += 1
+    print "this is new key [" + group_name_key + "] at " + str(free_index) + " for " + full_language_code
+    wks.update_cell(free_index, KEYS_COLUMN + 1, real_key)
+    wks.update_cell(free_index, GROUP_LOCATION_COLUMN + 1, refKeyValue[full_language_code][group_name_key]["group location"])
+    wks.update_cell(free_index, GROUP_NAME_COLUMN + 1, refKeyValue[full_language_code][group_name_key]["group"])
+    wks.update_cell(free_index, c + 1, value)
+
+    return free_index, print_add_key_title
 
 def update_list_key_mark_no_used(a_sheet_name, a_project_temp_dir):
     gc = gspread.login(LOGIN_ACCOUNT, LOGIN_PASSWORD)
@@ -510,9 +564,10 @@ def main(argv):
     command = ''
     output_format = 'strings'
     input_dir = ''
+    forceUpdateToSheet = False
     try:
         #opts, args = getopt.getopt(argv,"hi:o:",["ifile=","ofile="])
-        opts, args = getopt.getopt(argv,"ho:p:e:c:u:m:fj:",["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings","json","mergeJsonfiles="])
+        opts, args = getopt.getopt(argv,"ho:p:e:c:u:m:fj:",["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings","json","mergeJsonfiles=","forceUpdateToSheet"])
     except getopt.GetoptError:
         print 'error: parse.py wrong command'
         sys.exit(2)
@@ -544,6 +599,8 @@ def main(argv):
             result_dir = arg
         elif opt in ("-p", "--project"):
             project_path = arg
+        elif opt in ("--forceUpdateToSheet"):
+            forceUpdateToSheet = True
     
     if command not in ['', 'j'] and project_path == '':
         errcode = os.system("git clone " + PROJECT_GIT_REPO + " --branch " + PROJECT_GIT_BRANCH + " --single-branch workspace")
@@ -571,8 +628,9 @@ def main(argv):
         print 'prject dir = ' + project_path
         print "update sheet = " + export_sheet
         print "result dir = " + result_dir
+        print "forceUpdateToSheet = " + str(forceUpdateToSheet)
         copy_project_files(project_temp_dir, project_path)
-        update_values_to_new_worksheet(export_sheet, project_temp_dir)
+        update_values_to_new_worksheet(export_sheet, project_temp_dir, forceUpdateToSheet)
     elif command == 'm':
         print 'prject dir = ' + project_path
         print "update sheet = " + export_sheet
