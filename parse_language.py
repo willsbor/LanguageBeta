@@ -565,9 +565,10 @@ def main(argv):
     output_format = 'strings'
     input_dir = ''
     forceUpdateToSheet = False
+    commit_message=''
     try:
         #opts, args = getopt.getopt(argv,"hi:o:",["ifile=","ofile="])
-        opts, args = getopt.getopt(argv,"ho:p:e:c:u:m:fj:",["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings","json","mergeJsonfiles=","forceUpdateToSheet"])
+        opts, args = getopt.getopt(argv,"ho:p:e:c:u:m:f:j:",["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings=","json","mergeJsonfiles=","forceUpdateToSheet"])
     except getopt.GetoptError:
         print 'error: parse.py wrong command'
         sys.exit(2)
@@ -589,6 +590,7 @@ def main(argv):
             export_sheet = arg
         elif opt in ("-f", "--forceUpdateProjectStrings"):
             command = 'f'
+            commit_message = arg
         elif opt in ("-j", "--mergeJsonfiles"):
             command = 'j'
             input_dir = arg
@@ -645,6 +647,7 @@ def main(argv):
         os.system("cd workspace && git branch localization-" + today.isoformat());
         os.system("cd workspace && git checkout localization-" + today.isoformat());
         copy_back_to_project_files(result_dir, project_path)
+        os.system("cd workspace && git commit -a -m \"" + commit_message + "\"");
         os.system("cd workspace && git push origin localization-" + today.isoformat());
         os.system("cd workspace && git reset --hard HEAD");
         os.system("cd workspace && git checkout " + PROJECT_GIT_BRANCH);
