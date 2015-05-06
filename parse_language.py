@@ -479,17 +479,17 @@ def update_values_to_new_worksheet(a_sheet_name, a_project_temp_dir, a_force_upd
                 if values_len > 1:
                     for x in range(1,values_len):
                         value = encode_value_for_strings(refKeyValue[full_language_code][group_name_key]["value"][x]).decode('utf-8')
-                        local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, "### duplicate " + str(x) + " ###" + real_key, refKeyValue, value)
+                        free_index, print_add_key_title = local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, "### duplicate " + str(x) + " ###" + real_key, refKeyValue, value)
 
             else:
                 value = encode_value_for_strings(refKeyValue[full_language_code][group_name_key]["value"][0]).decode('utf-8')
-                local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, real_key, refKeyValue, value)
+                free_index, print_add_key_title = local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, real_key, refKeyValue, value)
                 
                 values_len = len(refKeyValue[full_language_code][group_name_key]["value"])
                 if values_len > 1:
                     for x in range(1,values_len):
                         value = encode_value_for_strings(refKeyValue[full_language_code][group_name_key]["value"][x]).decode('utf-8')
-                        local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, "### duplicate " + str(x) + " ###" + real_key, refKeyValue, value)
+                        free_index, print_add_key_title = local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, "### duplicate " + str(x) + " ###" + real_key, refKeyValue, value)
 
 def local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, group_name_key, full_language_code, real_key, refKeyValue, value):
     if not print_add_key_title:
