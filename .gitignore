@@ -57,6 +57,7 @@ target/
 # project
 *.ini
 a_credentials_file
+a_credentials_file_2
 .DS_Store
 workspace/
 result/

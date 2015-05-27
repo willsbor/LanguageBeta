@@ -9,6 +9,8 @@ import getopt
 import json
 import ConfigParser
 from datetime import date
+from oauth2client.client import OAuth2WebServerFlow
+from oauth2client.file import Storage
 
 COL_SHIFT = 4
 KEYS_COLUMN = 0
@@ -26,11 +28,18 @@ LANGUAGE_CODE_ROW = 0
 
 SKIP_KEYS = ['CFBundleShortVersionString']
 SEARCH_FILE_SKIP_DIR_NAMES = ['.git', '.DS_Store', 'Pods']
-LOGIN_ACCOUNT = 'account'
-LOGIN_PASSWORD = 'xxxxxxx'
 WORKING_SPREAD_NAME = 'gspread'
 PROJECT_GIT_REPO = 'repo url ssh or https'
 PROJECT_GIT_BRANCH = 'master'
+
+# Copy your credentials from the console
+CLIENT_ID = '...'
+CLIENT_SECRET = '...'
+
+# Check https:https://developers.google.com/google-apps/spreadsheets/authorize
+OAUTH_SCOPE = 'https://spreadsheets.google.com/feeds https://docs.google.com/feeds'
+# Redirect URI for installed apps
+REDIRECT_URI = 'urn:ietf:wg:oauth:2.0:oob'
 
 
 def toWPString(content):
@@ -160,9 +169,29 @@ def jsons_to_one_file(a_input_dir, a_output_filename):
     with open(a_output_filename, 'w') as outfile:
         json.dump(lang_group_key_value, outfile)
 
+def openGC():
+  # Create a credential storage object.  You pick the filename.
+    storage = Storage('a_credentials_file_2')
+
+  # Attempt to load existing credentials.  Null is returned if it fails.
+    credentials = storage.get()
+
+    if not credentials:
+        print "request new access token"
+        # Run through the OAuth flow and retrieve credentials
+        flow = OAuth2WebServerFlow(CLIENT_ID, CLIENT_SECRET, OAUTH_SCOPE,
+                                   redirect_uri=REDIRECT_URI)
+        authorize_url = flow.step1_get_authorize_url()
+        print 'Go to the following link in your browser: ' + authorize_url
+        code = raw_input('Enter verification code: ').strip()
+        credentials = flow.step2_exchange(code)
+        storage.put(credentials)
+
+    gc = gspread.authorize(credentials)
+    return gc
 
 def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type='strings'):
-    gc = gspread.login(LOGIN_ACCOUNT, LOGIN_PASSWORD)
+    gc = openGC()
     wk = gc.open(WORKING_SPREAD_NAME)
     try:
         wks = wk.worksheet(a_sheet_name)
@@ -381,7 +410,7 @@ def read_all_reference_data_type3(a_project_temp_dir):
     return refKeyValue
 
 def create_new_worksheet(a_sheet_name):
-    gc = gspread.login(LOGIN_ACCOUNT, LOGIN_PASSWORD)
+    gc = openGC()
     wk = gc.open(WORKING_SPREAD_NAME)
     try:
         wks = wk.worksheet(a_sheet_name)
@@ -412,7 +441,7 @@ def get_key_index(list_of_lists):
     return list_group_name_key_index
 
 def update_values_to_new_worksheet(a_sheet_name, a_project_temp_dir, a_force_update_value=False):
-    gc = gspread.login(LOGIN_ACCOUNT, LOGIN_PASSWORD)
+    gc = openGC()
     wk = gc.open(WORKING_SPREAD_NAME)
     try:
         wks = wk.worksheet(a_sheet_name)
@@ -506,7 +535,7 @@ def local_update_cell_with_new_key(wks, c, free_index, print_add_key_title, grou
     return free_index, print_add_key_title
 
 def update_list_key_mark_no_used(a_sheet_name, a_project_temp_dir):
-    gc = gspread.login(LOGIN_ACCOUNT, LOGIN_PASSWORD)
+    gc = openGC()
     wk = gc.open(WORKING_SPREAD_NAME)
     try:
         wks = wk.worksheet(a_sheet_name)
@@ -539,19 +568,19 @@ def update_list_key_mark_no_used(a_sheet_name, a_project_temp_dir):
 def main(argv):
     config = ConfigParser.ConfigParser()
     config.read('config.ini')
-    global LOGIN_ACCOUNT
-    global LOGIN_PASSWORD
+    global CLIENT_ID
+    global CLIENT_SECRET
     global WORKING_SPREAD_NAME
     global PROJECT_GIT_REPO
     global PROJECT_GIT_BRANCH
-    LOGIN_ACCOUNT = config.get('parse_language', 'LOGIN_ACCOUNT')
-    LOGIN_PASSWORD = config.get('parse_language', 'LOGIN_PASSWORD')
     WORKING_SPREAD_NAME = config.get('parse_language', 'WORKING_SPREAD_NAME')
     PROJECT_GIT_REPO = config.get('parse_language', 'PROJECT_GIT_REPO')
     PROJECT_GIT_BRANCH = config.get('parse_language', 'PROJECT_GIT_BRANCH')
+    CLIENT_ID = config.get('upload_language_beta', 'CLIENT_ID')
+    CLIENT_SECRET = config.get('upload_language_beta', 'CLIENT_SECRET')
 
-    print LOGIN_ACCOUNT
-    print LOGIN_PASSWORD
+    print CLIENT_ID
+    print CLIENT_SECRET
     print WORKING_SPREAD_NAME
     print PROJECT_GIT_REPO
     print PROJECT_GIT_BRANCH
