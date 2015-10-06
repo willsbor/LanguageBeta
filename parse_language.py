@@ -8,6 +8,7 @@ import sys
 import getopt
 import json
 import ConfigParser
+import ssl
 from datetime import date
 from oauth2client.client import OAuth2WebServerFlow
 from oauth2client.file import Storage
@@ -186,6 +187,10 @@ def openGC():
         code = raw_input('Enter verification code: ').strip()
         credentials = flow.step2_exchange(code)
         storage.put(credentials)
+
+    if sys.version_info >= (2, 7, 9):
+        import ssl
+        ssl._create_default_https_context = ssl._create_unverified_context
 
     gc = gspread.authorize(credentials)
     return gc
