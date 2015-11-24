@@ -505,7 +505,7 @@ def update_values_to_new_worksheet(a_sheet_name, a_project_temp_dir, a_force_upd
                 lang_value = refKeyValue[full_language_code][group_name_key]["value"][0]
                 list_lang_value = more_decode_value_for_strings(decode_value(list_lang_value.encode('utf-8'))).decode('utf-8')
                 if lang_value.decode('utf-8') != list_lang_value:
-                    if a_force_update_value or list_lang_value == '' or list_lang_value is None:
+                    if (a_force_update_value and list_lang_value != lang_value) or list_lang_value == '' or list_lang_value is None:
                         print "update [" + full_language_code + "] for " + str(realrow + 1) + " with new value = " + lang_value
                         wks.update_cell(realrow + 1, c + 1, encode_value_for_strings(lang_value).decode('utf-8'))
 
