@@ -599,10 +599,13 @@ def main(argv):
     output_format = 'strings'
     input_dir = ''
     forceUpdateToSheet = False
+    forceUpdateWorkspaceStrings = False
     commit_message=''
     try:
         #opts, args = getopt.getopt(argv,"hi:o:",["ifile=","ofile="])
-        opts, args = getopt.getopt(argv,"ho:p:e:c:u:m:f:j:",["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings=","json","mergeJsonfiles=","forceUpdateToSheet"])
+        opts, args = getopt.getopt(argv,
+            "ho:p:e:c:u:m:f:j:",
+            ["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings=","json","mergeJsonfiles=","forceUpdateToSheet","force-update-workspcae-strings"])
     except getopt.GetoptError:
         print 'error: parse.py wrong command'
         sys.exit(2)
@@ -637,13 +640,18 @@ def main(argv):
             project_path = arg
         elif opt in ("--forceUpdateToSheet"):
             forceUpdateToSheet = True
+        elif opt in ("--force-update-workspcae-strings"):
+            forceUpdateWorkspaceStrings = True
     
     if command not in ['', 'j'] and project_path == '':
+        print 'using ' + project_path + ', and updating by Git ...'
         errcode = os.system("git clone " + PROJECT_GIT_REPO + " --branch " + PROJECT_GIT_BRANCH + " --single-branch workspace")
         if errcode != 0:
             os.system("cd workspace && git reset --hard HEAD");
             os.system("cd workspace && git pull origin " + PROJECT_GIT_BRANCH);
         project_path = 'workspace/'
+    else :
+        print 'using \"' + project_path + '\" without updating by Git'
 
     if command not in ['', 'f', 'j'] and export_sheet == '':
         print 'need [export_sheet]'
@@ -655,6 +663,8 @@ def main(argv):
         print "export sheet = " + export_sheet
         copy_project_files(project_temp_dir, project_path)
         exportStrings(export_sheet, result_dir, project_temp_dir, output_format)
+        if forceUpdateWorkspaceStrings:
+            copy_back_to_project_files(result_dir, project_path)
         if output_format == 'json':
             jsons_to_one_file(result_dir, 'test_strings.json')
     elif command == 'c':
