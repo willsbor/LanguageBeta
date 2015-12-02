@@ -579,8 +579,8 @@ def main(argv):
     global PROJECT_GIT_REPO
     global PROJECT_GIT_BRANCH
     WORKING_SPREAD_NAME = config.get('parse_language', 'WORKING_SPREAD_NAME')
-    CLIENT_ID = config.get('upload_language_beta', 'CLIENT_ID')
-    CLIENT_SECRET = config.get('upload_language_beta', 'CLIENT_SECRET')
+    CLIENT_ID = config.get('parse_language', 'CLIENT_ID')
+    CLIENT_SECRET = config.get('parse_language', 'CLIENT_SECRET')
 
     try:
         PROJECT_GIT_REPO = config.get('parse_language', 'PROJECT_GIT_REPO')
