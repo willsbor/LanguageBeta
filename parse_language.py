@@ -579,10 +579,17 @@ def main(argv):
     global PROJECT_GIT_REPO
     global PROJECT_GIT_BRANCH
     WORKING_SPREAD_NAME = config.get('parse_language', 'WORKING_SPREAD_NAME')
-    PROJECT_GIT_REPO = config.get('parse_language', 'PROJECT_GIT_REPO')
-    PROJECT_GIT_BRANCH = config.get('parse_language', 'PROJECT_GIT_BRANCH')
     CLIENT_ID = config.get('upload_language_beta', 'CLIENT_ID')
     CLIENT_SECRET = config.get('upload_language_beta', 'CLIENT_SECRET')
+
+    try:
+        PROJECT_GIT_REPO = config.get('parse_language', 'PROJECT_GIT_REPO')
+        PROJECT_GIT_BRANCH = config.get('parse_language', 'PROJECT_GIT_BRANCH')
+    except ConfigParser.NoOptionError:
+        pass
+    else :
+        pass
+
 
     print CLIENT_ID
     print CLIENT_SECRET
@@ -643,7 +650,7 @@ def main(argv):
         elif opt in ("--force-update-workspcae-strings"):
             forceUpdateWorkspaceStrings = True
     
-    if command not in ['', 'j'] and project_path == '':
+    if command not in ['', 'j'] and project_path == '' and (PROJECT_GIT_REPO != '' and PROJECT_GIT_BRANCH != ''):
         print 'using ' + project_path + ', and updating by Git ...'
         errcode = os.system("git clone " + PROJECT_GIT_REPO + " --branch " + PROJECT_GIT_BRANCH + " --single-branch workspace")
         if errcode != 0:
