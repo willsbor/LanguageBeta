@@ -414,6 +414,30 @@ def read_all_reference_data_type3(a_project_temp_dir):
                     
     return refKeyValue
 
+def keys_string_to_map(a_keystring):
+    group_location = 'melmanSharediOS'
+    group_name = 'Localizable'
+    lang = 'en'
+    keys = a_keystring.strip().split(',')
+
+    refKeyValue = {}
+    if lang not in refKeyValue:
+            refKeyValue[lang] = {}
+    for key in keys:
+        key = key.strip()
+        group_name_key = group_location + ";|;" + group_name + ";|;" + key
+        if group_name_key not in refKeyValue[lang]:
+            refKeyValue[lang][group_name_key] = {}
+            refKeyValue[lang][group_name_key]["key"] = key
+            refKeyValue[lang][group_name_key]["group location"] = group_location
+            refKeyValue[lang][group_name_key]["group"] = group_name
+            refKeyValue[lang][group_name_key]["value"] = []
+
+        refKeyValue[lang][group_name_key]["value"].append(key)
+
+    return refKeyValue
+
+
 def create_new_worksheet(a_sheet_name):
     gc = openGC()
     wk = gc.open(WORKING_SPREAD_NAME)
@@ -446,6 +470,10 @@ def get_key_index(list_of_lists):
     return list_group_name_key_index
 
 def update_values_to_new_worksheet(a_sheet_name, a_project_temp_dir, a_force_update_value=False):
+    refKeyValue = read_all_reference_data_type3(a_project_temp_dir)
+    _update_values_to_new_worksheet(a_sheet_name, refKeyValue, a_force_update_value)
+
+def _update_values_to_new_worksheet(a_sheet_name, refKeyValue, a_force_update_value=False):
     gc = openGC()
     wk = gc.open(WORKING_SPREAD_NAME)
     try:
@@ -458,7 +486,7 @@ def update_values_to_new_worksheet(a_sheet_name, a_project_temp_dir, a_force_upd
     colCount = wks.col_count
     list_of_lists = wks.get_all_values()
     list_group_name_key_index = get_key_index(list_of_lists)
-    refKeyValue = read_all_reference_data_type3(a_project_temp_dir)
+    # refKeyValue = read_all_reference_data_type3(a_project_temp_dir)
     
     list_size = len(list_of_lists)
     list_done_count = 0
@@ -608,11 +636,12 @@ def main(argv):
     forceUpdateToSheet = False
     forceUpdateWorkspaceStrings = False
     commit_message=''
+    keys = ''
     try:
         #opts, args = getopt.getopt(argv,"hi:o:",["ifile=","ofile="])
         opts, args = getopt.getopt(argv,
-            "ho:p:e:c:u:m:f:j:",
-            ["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings=","json","mergeJsonfiles=","forceUpdateToSheet","force-update-workspcae-strings"])
+            "ho:p:e:c:u:m:f:j:a:k:",
+            ["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings=","json","mergeJsonfiles=","forceUpdateToSheet","force-update-workspcae-strings","add-keys-to=","keys="])
     except getopt.GetoptError:
         print 'error: parse.py wrong command'
         sys.exit(2)
@@ -649,8 +678,13 @@ def main(argv):
             forceUpdateToSheet = True
         elif opt in ("--force-update-workspcae-strings"):
             forceUpdateWorkspaceStrings = True
+        elif opt in ("-a", "--add-keys-to"):
+            command = 'a'
+            export_sheet = arg
+        elif opt in ("-k", "--keys"):
+            keys = arg
     
-    if command not in ['', 'j'] and project_path == '' and (PROJECT_GIT_REPO != '' and PROJECT_GIT_BRANCH != ''):
+    if command not in ['', 'j', 'a'] and project_path == '' and (PROJECT_GIT_REPO != '' and PROJECT_GIT_BRANCH != ''):
         print 'using ' + project_path + ', and updating by Git ...'
         errcode = os.system("git clone " + PROJECT_GIT_REPO + " --branch " + PROJECT_GIT_BRANCH + " --single-branch workspace")
         if errcode != 0:
@@ -707,6 +741,11 @@ def main(argv):
         print "input dir = " + input_dir
         print "output filename = " + result_dir
         jsons_to_one_file(input_dir, result_dir)
+    elif command == 'a':
+        print "update sheet = " + export_sheet
+        new_key_map = keys_string_to_map(keys)
+        _update_values_to_new_worksheet(export_sheet, new_key_map)
+
 
    
 if __name__ == "__main__":
