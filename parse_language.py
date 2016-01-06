@@ -488,7 +488,7 @@ def read_all_reference_data_type3(a_project_temp_dir):
     return refKeyValue
 
 def keys_string_to_map(a_keystring):
-    group_location = 'melmanSharediOS'
+    group_location = 'melmanSharediOS/Localization'
     group_name = 'Localizable'
     lang = 'en'
     keys = a_keystring.strip().split(',')
