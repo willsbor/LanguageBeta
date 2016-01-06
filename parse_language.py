@@ -13,12 +13,13 @@ from datetime import date
 from oauth2client.client import OAuth2WebServerFlow
 from oauth2client.file import Storage
 
-COL_SHIFT = 4
+COL_SHIFT = 5
 KEYS_COLUMN = 0
 DEFAULT_VALUES_COLUMN = KEYS_COLUMN + COL_SHIFT
-GROUP_LOCATION_COLUMN = 1
-GROUP_NAME_COLUMN = 2
+GROUP_LOCATION_COLUMN = 2
+GROUP_NAME_COLUMN = 3
 LANGUAGE_CODE_ROW = 0
+RENAME_COLUMN = 1
 
 
 # p = subprocess.Popen(['pwd'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -64,11 +65,14 @@ def find_string_file(a_dir, a_extension_name='.strings'):
             result.append(full_path)
     return result
 
-def copy_project_files(a_project_temp_dir, a_prject_dir):
+def copy_project_files(a_project_temp_dir, a_prject_dir, a_extension_names = ['.strings']):
     if os.path.exists(a_project_temp_dir):
         shutil.rmtree(a_project_temp_dir)
 
-    all_strings_files = find_string_file(a_prject_dir)
+    all_strings_files = []
+    for ext_name in a_extension_names:
+        all_strings_files.extend(find_string_file(a_prject_dir + "/", ext_name))
+
     # copy
     for path in all_strings_files:
         dst = path.replace(a_prject_dir, a_project_temp_dir + "/")
@@ -195,6 +199,70 @@ def openGC():
     gc = gspread.authorize(credentials)
     return gc
 
+def get_keys_map_to_new_name_keys(a_sheet_name):
+    gc = openGC()
+    wk = gc.open(WORKING_SPREAD_NAME)
+    try:
+        wks = wk.worksheet(a_sheet_name)
+    except:
+        print "error for wks"
+        return
+    rowCount = wks.row_count
+    colCount = wks.col_count
+    list_of_lists = wks.get_all_values()
+
+    oldkey_to_newkey = {}
+    old_key_set = []
+    new_key_set = []
+    for r in range(2, rowCount):
+        try:
+            key = list_of_lists[r][KEYS_COLUMN]
+            rename = list_of_lists[r][RENAME_COLUMN]
+            group_location = list_of_lists[r][GROUP_LOCATION_COLUMN]
+            group_name = list_of_lists[r][GROUP_NAME_COLUMN]
+        except:
+            break
+
+        if key is '' or key is None:
+            continue
+        if key[0] == '#':
+            continue
+        if key in SKIP_KEYS:
+            print "skip key = " + real_key
+            continue
+
+        if rename is None or rename == "":
+            continue
+
+        if group_location is '' or group_location is None:
+            group_location = 'empty'
+
+        if group_name is '' or group_name is None:
+            group_name = 'Localizable'
+
+        group_name_key = group_location + ";|;" + group_name + ";|;" + key
+        group_name_rename = group_location + ";|;" + group_name + ";|;" + rename
+        if group_name_key not in old_key_set:
+            if group_name_rename not in new_key_set:
+                if group_name_rename in old_key_set:
+                    print "there shouldn't be the same rename [" + group_name_rename + "] of keys [" + group_name_key + "] in old key set"
+                    return
+                if group_name_key in new_key_set:
+                    print "there shouldn't be the same rename [" + group_name_key + "] in old key set"
+                    return
+
+                old_key_set.append(group_name_key)
+                new_key_set.append(group_name_rename)
+                oldkey_to_newkey[group_name_key] = group_name_rename
+            else:
+                print "there shouldn't be the same rename [" + group_name_rename + "] of keys [" + group_name_key + "]"
+                return
+        else:
+            print "there shouldn't be the same keys [" + group_name_key + "]"
+            return
+
+    return oldkey_to_newkey
+        
 def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type='strings'):
     gc = openGC()
     wk = gc.open(WORKING_SPREAD_NAME)
@@ -304,10 +372,15 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
 
 
 
-def copy_back_to_project_files(a_from_dir, a_to_project_dir):
+def copy_back_to_project_files(a_from_dir, a_to_project_dir, a_extension_names = ['.strings']):
+
     if os.path.exists(a_from_dir):
         print "start back to project from " + a_from_dir + '/ to ' + a_to_project_dir
-        all_strings_files = find_string_file(a_from_dir + '/')
+        # all_strings_files = find_string_file(a_from_dir + '/')
+        all_strings_files = []
+        for ext_name in a_extension_names:
+            all_strings_files.extend(find_string_file(a_from_dir + "/", ext_name))
+
         # copy
         for path in all_strings_files:
             dst = path.replace(a_from_dir + "/", a_to_project_dir)
@@ -437,6 +510,87 @@ def keys_string_to_map(a_keystring):
 
     return refKeyValue
 
+def search_key_and_replace(key_name_map, project_path, ext_filetypes):
+    files = []
+    for ext_name in ext_filetypes:
+        files.extend(find_string_file(project_path + "/", ext_name))
+
+    files_context = {}
+    # open file and got matched line
+    for group_name_key in iter(key_name_map):
+        group_name_rename = key_name_map[group_name_key]
+
+        real_key = group_name_key.split(";|;")[-1]
+        real_rename = group_name_rename.split(";|;")[-1]
+
+        if real_rename == real_key:
+            continue
+
+        real_key = real_key.replace("[", "\[")
+        real_key = real_key.replace("]", "\]")
+        real_key = real_key.replace("@", "\@")
+        real_key = real_key.replace("%", "\%")
+        real_key = real_key.replace(")", "\)")
+        real_key = real_key.replace("(", "\(")
+        real_key = real_key.replace("$", "\$")
+
+        regex = re.compile(r"([@]?\")" + real_key + "\"")
+        #print "real_key = " + real_key
+        is_hit = False
+        for path in files:
+            #print "path = " + path
+            if path not in files_context:
+                files_context[path] = open(path).read()
+
+            new_string = regex.sub(r'\1' + real_rename + "\"", files_context[path])
+
+            if new_string != files_context[path]:
+                files_context[path] = new_string
+                is_hit = True
+            #result = regex.findall(files_context[path])
+            #if len(result) > 0:
+            #    print "result = " + str(result)
+
+        if not is_hit:
+            print "!!! Can't find Key: " + group_name_key
+
+    for path in iter(files_context):
+        #print "path = " + path
+        with open(path, 'w') as f:
+            f.write(files_context[path])
+
+def update_list_from_key_to_new_key(a_sheet_name, a_key_map):
+    gc = openGC()
+    wk = gc.open(WORKING_SPREAD_NAME)
+    try:
+        wks = wk.worksheet(a_sheet_name)
+    except:
+        print "error for wks"
+        return
+
+    rowCount = wks.row_count
+    colCount = wks.col_count
+    list_of_lists = wks.get_all_values()
+
+    row_size = len(list_of_lists)
+    for x in range(1, row_size):
+        try:
+            list_key = list_of_lists[x][KEYS_COLUMN]
+            list_group_location = list_of_lists[x][GROUP_LOCATION_COLUMN]
+            list_group_name = list_of_lists[x][GROUP_NAME_COLUMN]
+        except:
+            break
+
+        if len(list_key) == 0 or list_key[0] == '#':
+            continue
+
+        group_name_key = list_group_location + ";|;" + list_group_name + ";|;" + list_key
+        if group_name_key in a_key_map:
+            group_name_rename = a_key_map[group_name_key]
+            real_rename = group_name_rename.split(";|;")[-1]
+            wks.update_cell(x + 1, KEYS_COLUMN + 1, real_rename)
+            wks.update_cell(x + 1, RENAME_COLUMN + 1, "")
+                
 
 def create_new_worksheet(a_sheet_name):
     gc = openGC()
@@ -597,7 +751,6 @@ def update_list_key_mark_no_used(a_sheet_name, a_project_temp_dir):
             print "marked " + group_name_key + " at row = " + str(x + 1)
             wks.update_cell(x + 1, KEYS_COLUMN + 1, "##" + list_key)
 
-
 def main(argv):
     config = ConfigParser.ConfigParser()
     config.read('config.ini')
@@ -641,7 +794,7 @@ def main(argv):
         #opts, args = getopt.getopt(argv,"hi:o:",["ifile=","ofile="])
         opts, args = getopt.getopt(argv,
             "ho:p:e:c:u:m:f:j:a:k:",
-            ["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings=","json","mergeJsonfiles=","forceUpdateToSheet","force-update-workspcae-strings","add-keys-to=","keys="])
+            ["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings=","json","mergeJsonfiles=","forceUpdateToSheet","force-update-workspcae-strings","add-keys-to=","keys=","rename="])
     except getopt.GetoptError:
         print 'error: parse.py wrong command'
         sys.exit(2)
@@ -683,6 +836,9 @@ def main(argv):
             export_sheet = arg
         elif opt in ("-k", "--keys"):
             keys = arg
+        elif opt in ("--rename"):
+            command = 'r'
+            export_sheet = arg
     
     if command not in ['', 'j', 'a'] and project_path == '' and (PROJECT_GIT_REPO != '' and PROJECT_GIT_BRANCH != ''):
         print 'using ' + project_path + ', and updating by Git ...'
@@ -745,6 +901,19 @@ def main(argv):
         print "update sheet = " + export_sheet
         new_key_map = keys_string_to_map(keys)
         _update_values_to_new_worksheet(export_sheet, new_key_map)
+    elif command == 'r':
+        print "rename the keys, and replace all the keys in the project"
+        print 'prject dir = ' + project_path
+        print "project temp dir = " + project_temp_dir
+        print "export sheet = " + export_sheet
+        copy_project_files(project_temp_dir, project_path, [".m", ".swift"])
+        key_name_map = get_keys_map_to_new_name_keys(export_sheet)
+        if key_name_map is not None:
+            #print "key_name_map = " + str(key_name_map)
+            search_key_and_replace(key_name_map, project_temp_dir, [".m", ".swift"])
+
+            copy_back_to_project_files(project_temp_dir, project_path, [".m", ".swift"])
+            update_list_from_key_to_new_key(export_sheet, key_name_map)
 
 
    
