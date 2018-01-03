@@ -12,15 +12,19 @@ import ssl
 from datetime import date
 from oauth2client.client import OAuth2WebServerFlow
 from oauth2client.file import Storage
+from distutils.version import LooseVersion, StrictVersion
 
-COL_SHIFT = 5
+COL_SHIFT = 7
 KEYS_COLUMN = 0
 DEFAULT_VALUES_COLUMN = KEYS_COLUMN + COL_SHIFT
 GROUP_LOCATION_COLUMN = 2
 GROUP_NAME_COLUMN = 3
 LANGUAGE_CODE_ROW = 0
 RENAME_COLUMN = 1
+START_VERSION_COLUMN = 4
+END_VERSION_COLUMN = 5
 
+CURRENT_MARKET_VERSION = ""
 
 # p = subprocess.Popen(['pwd'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 # DEFAULT_PATH, err = p.communicate()
@@ -37,6 +41,8 @@ PROJECT_GIT_BRANCH = 'master'
 # Copy your credentials from the console
 CLIENT_ID = '...'
 CLIENT_SECRET = '...'
+DEFAULT_GROUP_LOCATION = '...'
+DEFAULT_GROUP = '...'
 
 # Check https:https://developers.google.com/google-apps/spreadsheets/authorize
 OAUTH_SCOPE = 'https://spreadsheets.google.com/feeds https://docs.google.com/feeds'
@@ -141,6 +147,18 @@ def get_project_string_key_index_comment(a_project_temp_dir):
 
     return refKeyIndex, refKeyKey, refKeyValue, refKeyComment
 
+def getGroupLocationWithDefault(string):
+    if string == '':
+        return DEFAULT_GROUP_LOCATION
+    else:
+        return string
+
+def getGroupWithDefault(string):
+    if string == '':
+        return DEFAULT_GROUP
+    else:
+        return string
+
 def decode_value(string):
     string = re.sub(r"^'", "^", string)
     return string.replace('\\\'', '\'').replace("\n", "\n")
@@ -218,8 +236,8 @@ def get_keys_map_to_new_name_keys(a_sheet_name):
         try:
             key = list_of_lists[r][KEYS_COLUMN]
             rename = list_of_lists[r][RENAME_COLUMN]
-            group_location = list_of_lists[r][GROUP_LOCATION_COLUMN]
-            group_name = list_of_lists[r][GROUP_NAME_COLUMN]
+            group_location = getGroupLocationWithDefault(list_of_lists[r][GROUP_LOCATION_COLUMN])
+            group_name = getGroupWithDefault(list_of_lists[r][GROUP_NAME_COLUMN])
         except:
             break
 
@@ -289,11 +307,15 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
             if lang == 'key':
                 continue
 
+            refKeyToBeRemoved = []
+
             for r in range(2, rowCount):
                 try:
                     key = list_of_lists[r][KEYS_COLUMN]
-                    group_location = list_of_lists[r][GROUP_LOCATION_COLUMN]
-                    group_name = list_of_lists[r][GROUP_NAME_COLUMN]
+                    group_location = getGroupLocationWithDefault(list_of_lists[r][GROUP_LOCATION_COLUMN])
+                    group_name = getGroupWithDefault(list_of_lists[r][GROUP_NAME_COLUMN])
+                    start_version = list_of_lists[r][START_VERSION_COLUMN]
+                    end_version = list_of_lists[r][END_VERSION_COLUMN]
                 except:
                     break
 
@@ -304,9 +326,17 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
                 if key in SKIP_KEYS:
                     print "skip key = " + real_key
                     continue
-
                 if lang not in refKeyIndex[group_location][group_name]:
                     continue
+
+                if start_version != '' and end_version != '' and LooseVersion(start_version) > LooseVersion(end_version):
+                    raise ValueError("[%s][%s] last version (%s) is smaller than start_version (%s)" % (r, key, end_version, start_version))
+
+                to_be_removed = False
+                if start_version != '' and CURRENT_MARKET_VERSION != '' and LooseVersion(start_version) > LooseVersion(CURRENT_MARKET_VERSION):
+                    to_be_removed = True
+                if end_version != '' and CURRENT_MARKET_VERSION != '' and LooseVersion(end_version) < LooseVersion(CURRENT_MARKET_VERSION):
+                    to_be_removed = True
 
                 if group_location is '' or group_location is None:
                     group_location = 'empty'
@@ -314,22 +344,28 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
                 if group_name is '' or group_name is None:
                     group_name = 'Localizable'
 
-                
-
                 value = toWPString(list_of_lists[r][c])
                 #if value is None or value == '':
                 #    value = toWPString(list_of_lists[r][DEFAULT_VALUES_COLUMN])
 
+                print "[processing] " + key + " (to_be_removed = " + str(to_be_removed) + ")"
+                
+
                 if key in refKeyIndex[group_location][group_name][lang]:
                     key_index = refKeyIndex[group_location][group_name][lang][key]
                     refKeyValue[group_location][group_name][lang][key_index] = decode_value(value.encode('utf-8'))
+                    if to_be_removed:
+                        refKeyToBeRemoved.append(key_index)
                 elif value != '' and value != None:
                     print "append a new key = " + key + " at " + lang + ", " + group_name + ", " + group_location + "with [" + value + "]"
                     refKeyIndex[group_location][group_name][lang][key] = len(refKeyKey[group_location][group_name][lang])
                     refKeyKey[group_location][group_name][lang].append(key)
                     refKeyValue[group_location][group_name][lang].append(decode_value(value.encode('utf-8')))
                     refKeyComment[group_location][group_name][lang].append('\n/* No comment provided by engineer. */\n')
+                    if to_be_removed:
+                        refKeyToBeRemoved.append(key_index)
 
+            print "[Start to File]"
             for group_location in iter(refKeyKey):
                 #print "==> " + group_location
                 for group_name in iter(refKeyKey[group_location]):
@@ -346,6 +382,8 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
                         content = {}
                         total = len(refKeyKey[group_location][group_name][lang])
                         for x in range(0, total):
+                            if x in refKeyToBeRemoved:
+                                continue
                             sub = {}
                             sub['comment'] = refKeyComment[group_location][group_name][lang][x]
                             sub['value'] = refKeyValue[group_location][group_name][lang][x]
@@ -364,12 +402,13 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
                         f = io.open(filename, 'wb')
                         total = len(refKeyKey[group_location][group_name][lang])
                         for x in range(0, total):
+                            if x in refKeyToBeRemoved:
+                                continue
                             content = refKeyComment[group_location][group_name][lang][x] + '\"' + refKeyKey[group_location][group_name][lang][x] + '\" = \"' + more_decode_value_for_strings(refKeyValue[group_location][group_name][lang][x]) + '\";\n'
                             f.write(content)
                         if total > 0:
                             f.write('\n')
                         f.close()
-
 
 
 def copy_back_to_project_files(a_from_dir, a_to_project_dir, a_extension_names = ['.strings']):
@@ -576,8 +615,8 @@ def update_list_from_key_to_new_key(a_sheet_name, a_key_map):
     for x in range(1, row_size):
         try:
             list_key = list_of_lists[x][KEYS_COLUMN]
-            list_group_location = list_of_lists[x][GROUP_LOCATION_COLUMN]
-            list_group_name = list_of_lists[x][GROUP_NAME_COLUMN]
+            list_group_location = getGroupLocationWithDefault(list_of_lists[x][GROUP_LOCATION_COLUMN])
+            list_group_name = getGroupWithDefault(list_of_lists[x][GROUP_NAME_COLUMN])
         except:
             break
 
@@ -590,21 +629,6 @@ def update_list_from_key_to_new_key(a_sheet_name, a_key_map):
             real_rename = group_name_rename.split(";|;")[-1]
             wks.update_cell(x + 1, KEYS_COLUMN + 1, real_rename)
             wks.update_cell(x + 1, RENAME_COLUMN + 1, "")
-                
-
-def create_new_worksheet(a_sheet_name):
-    gc = openGC()
-    wk = gc.open(WORKING_SPREAD_NAME)
-    try:
-        wks = wk.worksheet(a_sheet_name)
-    except:
-        wks = wk.add_worksheet(a_sheet_name, 1000, 32)
-
-    index = 1
-    for value in ["key", "group location", "group", "description", "en", "zh-Hant", "ja", "ko", "pt", "Th"]:
-        print "[" + str(index) + ";" + value + "]"
-        wks.update_cell(1, index, value)
-        index += 1
      
 def get_key_index(list_of_lists):
     list_group_name_key_index = {}
@@ -612,8 +636,8 @@ def get_key_index(list_of_lists):
     for x in range(1, row_size):
         try:
             key = list_of_lists[x][KEYS_COLUMN]
-            group_location = list_of_lists[x][GROUP_LOCATION_COLUMN]
-            group_name = list_of_lists[x][GROUP_NAME_COLUMN]
+            group_location = getGroupLocationWithDefault(list_of_lists[x][GROUP_LOCATION_COLUMN])
+            group_name = getGroupWithDefault(list_of_lists[x][GROUP_NAME_COLUMN])
         except:
             break
         if key is '' or key is None:
@@ -672,8 +696,8 @@ def _update_values_to_new_worksheet(a_sheet_name, refKeyValue, a_force_update_va
                 realrow = list_group_name_key_index[group_name_key]
                 try:
                     list_key = list_of_lists[realrow][KEYS_COLUMN]
-                    list_group_location = list_of_lists[realrow][GROUP_LOCATION_COLUMN]
-                    list_group_name = list_of_lists[realrow][GROUP_NAME_COLUMN]
+                    list_group_location = getGroupLocationWithDefault(list_of_lists[realrow][GROUP_LOCATION_COLUMN])
+                    list_group_name = getGroupWithDefault(list_of_lists[realrow][GROUP_NAME_COLUMN])
                     list_lang_value = list_of_lists[realrow][c]
                 except:
                     break
@@ -738,8 +762,8 @@ def update_list_key_mark_no_used(a_sheet_name, a_project_temp_dir):
     for x in range(1, row_size):
         try:
             list_key = list_of_lists[x][KEYS_COLUMN]
-            list_group_location = list_of_lists[x][GROUP_LOCATION_COLUMN]
-            list_group_name = list_of_lists[x][GROUP_NAME_COLUMN]
+            list_group_location = getGroupLocationWithDefault(list_of_lists[x][GROUP_LOCATION_COLUMN])
+            list_group_name = getGroupWithDefault(list_of_lists[x][GROUP_NAME_COLUMN])
         except:
             break
 
@@ -759,10 +783,16 @@ def main(argv):
     global WORKING_SPREAD_NAME
     global PROJECT_GIT_REPO
     global PROJECT_GIT_BRANCH
+    global DEFAULT_GROUP_LOCATION
+    global DEFAULT_GROUP
+    global CURRENT_MARKET_VERSION
     WORKING_SPREAD_NAME = config.get('parse_language', 'WORKING_SPREAD_NAME')
     CLIENT_ID = config.get('parse_language', 'CLIENT_ID')
     CLIENT_SECRET = config.get('parse_language', 'CLIENT_SECRET')
-
+    DEFAULT_GROUP_LOCATION = config.get('parse_language', 'DEFAULT_GROUP_LOCATION')
+    DEFAULT_GROUP = config.get('parse_language', 'DEFAULT_GROUP')
+    DEFAULT_EXPORT_SHEET = config.get('parse_language', 'DEFAULT_EXPORT_SHEET')
+    
     try:
         PROJECT_GIT_REPO = config.get('parse_language', 'PROJECT_GIT_REPO')
         PROJECT_GIT_BRANCH = config.get('parse_language', 'PROJECT_GIT_BRANCH')
@@ -781,7 +811,7 @@ def main(argv):
     project_path = ''
 
     project_temp_dir = 'project_string'
-    export_sheet = ''
+    export_sheet = DEFAULT_EXPORT_SHEET
     result_dir = 'result'
     command = ''
     output_format = 'strings'
@@ -793,8 +823,8 @@ def main(argv):
     try:
         #opts, args = getopt.getopt(argv,"hi:o:",["ifile=","ofile="])
         opts, args = getopt.getopt(argv,
-            "ho:p:e:c:u:m:f:j:a:k:",
-            ["output=","project=","exportSheet=","createSheet=","updateSheet=","markUnusedKey=","forceUpdateProjectStrings=","json","mergeJsonfiles=","forceUpdateToSheet","force-update-workspcae-strings","add-keys-to=","keys=","rename="])
+            "ho:p:eumf:j:ak:v:",
+            ["output=","project=","exportSheet","updateSheet","markUnusedKey","forceUpdateProjectStrings=","json","mergeJsonfiles=","forceUpdateToSheet","force-update-workspcae-strings","add-keys-to","keys=","rename","market-version="])
     except getopt.GetoptError:
         print 'error: parse.py wrong command'
         sys.exit(2)
@@ -804,22 +834,18 @@ def main(argv):
            sys.exit()
         elif opt in ("-e", "--exportSheet"):
             command = 'e'
-            export_sheet = arg
-        elif opt in ("-c", "--createSheet"):
-            command = 'c'
-            export_sheet = arg
         elif opt in ("-u", "--updateSheet"):
             command = 'u'
-            export_sheet = arg
         elif opt in ("-m", "--markUnusedKey"):
             command = 'm'
-            export_sheet = arg
         elif opt in ("-f", "--forceUpdateProjectStrings"):
             command = 'f'
             commit_message = arg
         elif opt in ("-j", "--mergeJsonfiles"):
             command = 'j'
             input_dir = arg
+        elif opt in ("-v", "--market-version"):
+            CURRENT_MARKET_VERSION = arg
         elif opt in ("--json"):
             print 'setting to json'
             output_format = 'json'
@@ -833,12 +859,10 @@ def main(argv):
             forceUpdateWorkspaceStrings = True
         elif opt in ("-a", "--add-keys-to"):
             command = 'a'
-            export_sheet = arg
         elif opt in ("-k", "--keys"):
             keys = arg
         elif opt in ("--rename"):
             command = 'r'
-            export_sheet = arg
     
     if command not in ['', 'j', 'a'] and project_path == '' and (PROJECT_GIT_REPO != '' and PROJECT_GIT_BRANCH != ''):
         print 'using ' + project_path + ', and updating by Git ...'
@@ -864,9 +888,6 @@ def main(argv):
             copy_back_to_project_files(result_dir, project_path)
         if output_format == 'json':
             jsons_to_one_file(result_dir, 'test_strings.json')
-    elif command == 'c':
-        print "create sheet = " + export_sheet
-        create_new_worksheet(export_sheet)
     elif command == 'u':
         print 'prject dir = ' + project_path
         print "update sheet = " + export_sheet

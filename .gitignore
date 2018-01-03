@@ -64,3 +64,4 @@ result/
 project_string/
 *.json
 *.strings
+venv/
