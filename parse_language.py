@@ -75,6 +75,8 @@ def copy_project_files(a_project_temp_dir, a_prject_dir, a_extension_names = ['.
     if os.path.exists(a_project_temp_dir):
         shutil.rmtree(a_project_temp_dir)
 
+    os.makedirs(a_project_temp_dir)
+
     all_strings_files = []
     for ext_name in a_extension_names:
         all_strings_files.extend(find_string_file(a_prject_dir + "/", ext_name))
