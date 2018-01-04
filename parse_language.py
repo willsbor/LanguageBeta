@@ -309,6 +309,7 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
             if lang == 'key':
                 continue
 
+            hasBeModified = []
             refKeyToBeRemoved = []
 
             for r in range(2, rowCount):
@@ -355,17 +356,25 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
 
                 if key in refKeyIndex[group_location][group_name][lang]:
                     key_index = refKeyIndex[group_location][group_name][lang][key]
-                    refKeyValue[group_location][group_name][lang][key_index] = decode_value(value.encode('utf-8'))
                     if to_be_removed:
                         refKeyToBeRemoved.append(key_index)
+                    else:
+                        refKeyValue[group_location][group_name][lang][key_index] = decode_value(value.encode('utf-8'))
+                        hasBeModified.append(key_index)
                 elif value != '' and value != None:
                     print "append a new key = " + key + " at " + lang + ", " + group_name + ", " + group_location + "with [" + value + "]"
-                    refKeyIndex[group_location][group_name][lang][key] = len(refKeyKey[group_location][group_name][lang])
+                    key_index = len(refKeyKey[group_location][group_name][lang])
+                    refKeyIndex[group_location][group_name][lang][key] = key_index
                     refKeyKey[group_location][group_name][lang].append(key)
                     refKeyValue[group_location][group_name][lang].append(decode_value(value.encode('utf-8')))
                     refKeyComment[group_location][group_name][lang].append('\n/* No comment provided by engineer. */\n')
+                    hasBeModified.append(key_index)
                     if to_be_removed:
                         refKeyToBeRemoved.append(key_index)
+                    else:
+                        hasBeModified.append(key_index)
+
+
 
             print "[Start to File]"
             for group_location in iter(refKeyKey):
@@ -384,7 +393,7 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
                         content = {}
                         total = len(refKeyKey[group_location][group_name][lang])
                         for x in range(0, total):
-                            if x in refKeyToBeRemoved:
+                            if x in refKeyToBeRemoved and x not in hasBeModified:
                                 continue
                             sub = {}
                             sub['comment'] = refKeyComment[group_location][group_name][lang][x]
@@ -404,7 +413,7 @@ def exportStrings(a_sheet_name, a_output_dir, a_project_temp_dir, a_output_type=
                         f = io.open(filename, 'wb')
                         total = len(refKeyKey[group_location][group_name][lang])
                         for x in range(0, total):
-                            if x in refKeyToBeRemoved:
+                            if x in refKeyToBeRemoved and x not in hasBeModified:
                                 continue
                             content = refKeyComment[group_location][group_name][lang][x] + '\"' + refKeyKey[group_location][group_name][lang][x] + '\" = \"' + more_decode_value_for_strings(refKeyValue[group_location][group_name][lang][x]) + '\";\n'
                             f.write(content)
